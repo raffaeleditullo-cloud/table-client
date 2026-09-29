@@ -5,6 +5,7 @@ import ActionBar from './components/flow/ActionBar';
 import LivePreview from './components/LivePreview';
 import SuccessModal from './components/SuccessModal';
 import FaqDrawer from './components/FaqDrawer';
+import LiveCopilotModal from './components/copilot/LiveCopilotModal';
 import CompanyScreen from './components/screens/CompanyScreen';
 import { SectorScreen } from './components/screens/ChoiceScreens';
 import SolutionsScreen from './components/screens/SolutionsScreen';
@@ -16,7 +17,7 @@ import LookScreen from './components/screens/LookScreen';
 import SummaryScreen from './components/screens/SummaryScreen';
 
 import { COLOR_PALETTES, FONT_OPTIONS, HOSTING_COMPLIANCE, AI_ORBS } from './data/configOptions';
-import { getSolution } from './data/catalog';
+import { SECTORS, getSolution } from './data/catalog';
 import { validateContacts } from './data/contactFields';
 import { generateProjectPdf } from './utils/pdfGenerator';
 import { buildDossier, createDocCode } from './utils/dossier';
@@ -54,6 +55,7 @@ const isTyping = (target) => Boolean(target.closest?.('input, textarea, select')
 function Configurator({ onReset, onForceReset }) {
   const [screenKey, setScreenKey] = useState('company');
   const [faqOpen, setFaqOpen] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
 
   // Company & need
   const [clientInfo, setClientInfo] = useState({ company: '', vat: '', name: '', role: '', email: '', phone: '' });
@@ -134,6 +136,55 @@ function Configurator({ onReset, onForceReset }) {
     return false;
   };
 
+  // Precompile entire Configurator from Copilot analysis
+  const handleApplyCopilot = (extracted) => {
+    if (!extracted) return;
+
+    if (extracted.clientInfo) {
+      setClientInfo((prev) => ({
+        company: extracted.clientInfo.company || prev.company,
+        vat: extracted.clientInfo.vat || prev.vat,
+        name: extracted.clientInfo.name || prev.name,
+        role: extracted.clientInfo.role || prev.role,
+        email: extracted.clientInfo.email || prev.email,
+        phone: extracted.clientInfo.phone || prev.phone
+      }));
+    }
+
+    if (extracted.sectorId) {
+      const matchSector = SECTORS.find((s) => s.id === extracted.sectorId);
+      if (matchSector) setSelectedSector(matchSector);
+    }
+
+    if (Array.isArray(extracted.solutionIds) && extracted.solutionIds.length > 0) {
+      setSolutionIds(extracted.solutionIds);
+    }
+
+    if (extracted.modules && typeof extracted.modules === 'object') {
+      setModules(extracted.modules);
+    }
+
+    if (extracted.voice) {
+      setVoice((prev) => ({
+        ...prev,
+        gender: extracted.voice.gender || prev.gender,
+        roles: extracted.voice.roles || prev.roles,
+        prompt: extracted.voice.prompt || prev.prompt
+      }));
+    }
+
+    if (Array.isArray(extracted.channelIds) && extracted.channelIds.length > 0) {
+      setChannelIds(extracted.channelIds);
+    }
+
+    if (extracted.currentState) setCurrentState(extracted.currentState);
+    if (extracted.improvement) setImprovement(extracted.improvement);
+    if (extracted.operatorNotes) setOperatorNotes(extracted.operatorNotes);
+
+    // Navigate straight to the summary review & PDF generation screen
+    goTo('summary');
+  };
+
   const dossier = buildDossier({
     sector: selectedSector,
     solutionIds,
@@ -187,10 +238,10 @@ function Configurator({ onReset, onForceReset }) {
     if (next) goTo(next.key);
   };
 
-  // Keyboard: ← back · → next · F cheat-sheet (ignored while typing)
+  // Keyboard: ← back · → next · F cheat-sheet · C Copilota (ignored while typing)
   const navRef = useRef({});
   useEffect(() => {
-    navRef.current = { goBack, goNext, blocked: isSuccessModalOpen || faqOpen };
+    navRef.current = { goBack, goNext, blocked: isSuccessModalOpen || faqOpen || copilotOpen };
   });
   useEffect(() => {
     const onKey = (e) => {
@@ -198,6 +249,11 @@ function Configurator({ onReset, onForceReset }) {
       if (e.key === 'f' || e.key === 'F') {
         e.preventDefault();
         setFaqOpen((v) => !v);
+        return;
+      }
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        setCopilotOpen((v) => !v);
         return;
       }
       if (navRef.current.blocked) return;
@@ -325,6 +381,7 @@ function Configurator({ onReset, onForceReset }) {
         }}
         onReset={() => onReset(hasData)}
         onOpenFaq={() => setFaqOpen(true)}
+        onOpenCopilot={() => setCopilotOpen(true)}
       />
 
       <main className="flex-1 w-full max-w-[1280px] mx-auto px-4 sm:px-8 pt-12 pb-40">
@@ -343,6 +400,12 @@ function Configurator({ onReset, onForceReset }) {
       />
 
       <FaqDrawer open={faqOpen} onClose={() => setFaqOpen(false)} />
+
+      <LiveCopilotModal
+        isOpen={copilotOpen}
+        onClose={() => setCopilotOpen(false)}
+        onApplyToConfigurator={handleApplyCopilot}
+      />
 
       <SuccessModal
         isOpen={isSuccessModalOpen}
