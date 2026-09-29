@@ -28,6 +28,7 @@ import { startRecording } from '../../lib/recorder';
 import { fetchLiveCoach, fetchPostCallAnalysis } from '../../lib/aiCoach';
 import { generateProjectPdf } from '../../utils/pdfGenerator';
 import { buildDossier, createDocCode } from '../../utils/dossier';
+import { normalizeExtraction } from '../../utils/normalizeExtraction';
 import { SECTORS, getSolution } from '../../data/catalog';
 import { COLOR_PALETTES, FONT_OPTIONS, HOSTING_COMPLIANCE, AI_ORBS } from '../../data/configOptions';
 
@@ -163,7 +164,7 @@ export default function LiveCopilotModal({ isOpen, onClose, onApplyToConfigurato
         : '';
 
       const data = await fetchPostCallAnalysis(rawText, checklistSummary);
-      setAnalysisData(data);
+      setAnalysisData(normalizeExtraction(data));
       setPhase('finished');
     } catch (err) {
       console.error('Stop analysis error:', err);
@@ -192,10 +193,10 @@ export default function LiveCopilotModal({ isOpen, onClose, onApplyToConfigurato
     const sectorObj = SECTORS.find((s) => s.id === analysisData.sectorId) || SECTORS[0];
     const dossier = buildDossier({
       sector: sectorObj,
-      solutionIds: analysisData.solutionIds || ['gestionale', 'crm'],
+      solutionIds: analysisData.solutionIds.length ? analysisData.solutionIds : ['gestionale', 'crm'],
       modules: analysisData.modules || {},
       voice: analysisData.voice || { gender: 'female', roles: ['appointments'], prompt: '' },
-      channelIds: analysisData.channelIds || ['whatsapp'],
+      channelIds: analysisData.channelIds.length ? analysisData.channelIds : ['whatsapp'],
       hosting: HOSTING_COMPLIANCE[0],
       currentState: analysisData.currentState || 'Gestione iniziale non centralizzata',
       improvement: analysisData.improvement || 'Piattaforma Cloud SaaS integrata con automazioni',

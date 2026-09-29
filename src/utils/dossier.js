@@ -1,5 +1,6 @@
 import { getSolution } from '../data/catalog';
 import { CHANNELS, VOICE_GENDERS, VOICE_ROLES, RADIUS_STYLES, STYLE_PRESETS } from '../data/configOptions';
+import { normalizeExtraction } from './normalizeExtraction';
 
 export function createDocCode() {
   return `STF-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -40,9 +41,17 @@ export function calculateTimeline(solutionIds = [], channelIds = []) {
 // Single source for the Scheda Tecnica di Fabbisogno: used by the summary screen and the PDF
 export function buildDossier(state) {
   const {
-    sector, solutionIds, modules, voice, channelIds, hosting,
+    sector, hosting,
     currentState, improvement, primaryColor, font, uiBorderRadius, brandFont, selectedOrb, clientInfo, operatorNotes
   } = state;
+
+  // Guard: gli id possono arrivare dal Copilota AI — quelli sconosciuti vengono scartati
+  const { solutionIds, modules, voice, channelIds } = normalizeExtraction({
+    solutionIds: state.solutionIds,
+    modules: state.modules,
+    voice: state.voice,
+    channelIds: state.channelIds
+  });
 
   const solutions = solutionIds.map((id) => {
     const sol = getSolution(id);

@@ -21,6 +21,7 @@ import { SECTORS, getSolution } from './data/catalog';
 import { validateContacts } from './data/contactFields';
 import { generateProjectPdf } from './utils/pdfGenerator';
 import { buildDossier, createDocCode } from './utils/dossier';
+import { normalizeExtraction } from './utils/normalizeExtraction';
 import { accentVars, INK } from './utils/color';
 
 const BRAND_HEX = '#1f47d1';
@@ -137,7 +138,8 @@ function Configurator({ onReset, onForceReset }) {
   };
 
   // Precompile entire Configurator from Copilot analysis
-  const handleApplyCopilot = (extracted) => {
+  const handleApplyCopilot = (raw) => {
+    const extracted = normalizeExtraction(raw);
     if (!extracted) return;
 
     if (extracted.clientInfo) {
@@ -160,7 +162,7 @@ function Configurator({ onReset, onForceReset }) {
       setSolutionIds(extracted.solutionIds);
     }
 
-    if (extracted.modules && typeof extracted.modules === 'object') {
+    if (Object.keys(extracted.modules).length > 0) {
       setModules(extracted.modules);
     }
 
@@ -168,7 +170,7 @@ function Configurator({ onReset, onForceReset }) {
       setVoice((prev) => ({
         ...prev,
         gender: extracted.voice.gender || prev.gender,
-        roles: extracted.voice.roles || prev.roles,
+        roles: extracted.voice.roles.length ? extracted.voice.roles : prev.roles,
         prompt: extracted.voice.prompt || prev.prompt
       }));
     }
