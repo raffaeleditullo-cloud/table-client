@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 120" width="560" height="120">
+  <title>CONFLAVORO TABLE CLIENT STUDIO</title>
+  <rect width="560" height="120" fill="#ffffff"/>
+  <!-- Mark -->
+  <g transform="translate(20 20)">
+    <rect width="80" height="80" fill="#0b0b0c"/>
+    <rect x="17" y="17" width="20" height="20" fill="none" stroke="#ffffff" stroke-width="4"/>
+    <rect x="43" y="17" width="20" height="20" fill="none" stroke="#ffffff" stroke-width="4"/>
+    <rect x="17" y="43" width="20" height="20" fill="none" stroke="#ffffff" stroke-width="4"/>
+    <rect x="41" y="41" width="24" height="24" fill="#1f47d1"/>
+  </g>
+  <!-- Wordmark -->
+  <text x="124" y="66" font-family="'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif" font-size="44" font-weight="800" letter-spacing="2.6" fill="#0b0b0c">CONFLAVORO</text>
+  <text x="126" y="94" font-family="'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="600" letter-spacing="4.4" fill="#66666d">TABLE CLIENT</text>
+  <rect x="251" y="85" width="5" height="5" fill="#1f47d1"/>
+  <text x="264" y="94" font-family="'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="600" letter-spacing="4.4" fill="#66666d">STUDIO</text>
+</svg>
