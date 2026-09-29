@@ -9,9 +9,18 @@ export const LIVE_RULES = [
     tone: 'blue',
     badge: '🚀 I 4 PASSAGGI DEL BANDO',
     title: 'Il cliente chiede cosa fare o come funziona',
-    hint: 'Spiega la procedura in 4 semplici passaggi:',
-    say: "1) Entro il 15 Ottobre le mandiamo il nostro preventivo col Codice Fornitore Conflavoro; 2) Il 20 Ottobre accede con SPID/CIE, carica il preventivo e firma digitalmente; 3) Il 10 Novembre ore 12:00 facciamo l'invio prioritario; 4) A fine lavori riceve il bonifico del 50% a fondo perduto dal Ministero.",
+    hint: 'Spiega i 4 passaggi (l\'invio compete al cliente/commercialista):',
+    say: "1) Entro il 15 Ottobre le inviamo il progetto e il preventivo formale con il Codice Fornitore MIMIT Conflavoro; 2) Dal 20 Ottobre accede su Invitalia con SPID/CIE, carica il preventivo e ottiene il Codice Domanda; 3) Il 10 Novembre alle ore 12:00 inoltra Lei o il Suo commercialista la domanda al Click-Day; 4) A collaudo ultimato riceve il bonifico del 50% a fondo perduto dal Ministero.",
     match: /\b(procedur\w*|passagg\w*|cosa devo fare|come funziona|codice fornitore|fornitore abilitato|20 ottobre|10 novembre|invitalia|come si fa|passi|fasi)\b/i
+  },
+  {
+    id: 'chi_invia',
+    tone: 'purple',
+    badge: '🔒 CHI INVIA LA DOMANDA?',
+    title: 'Chiede se inviamo noi la domanda su Invitalia',
+    hint: 'L\'invio formale è a carico del cliente/commercialista.',
+    say: "L'invio formale su Invitalia richiede il Suo SPID aziendale e compete a Lei o al Suo commercialista. Noi siamo il fornitore abilitato: Le forniamo il progetto tecnico, il preventivo ufficiale e il Codice MIMIT da allegare.",
+    match: /\b(la inviate voi|inviate voi|fate voi l'invio|ci pensate voi all'invio|fate voi la domanda|chi (invia|presenta|fa) la domanda|caricate voi|devo farlo io)\b/i
   },
   {
     id: 'prezzi',

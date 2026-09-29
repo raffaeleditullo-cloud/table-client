@@ -117,3 +117,40 @@ export function normalizeExtraction(raw) {
     reportMarkdown: text(raw.reportMarkdown, REPORT_MAX)
   };
 }
+
+// ─────────────────────────────────────────────────────────────
+// COACH LIVE: stessa filosofia per i suggerimenti periodici. Tutto ciò che
+// viene mostrato a video è ridotto a stringhe, così una risposta malformata
+// dell'LLM non può mandare in errore il rendering durante la chiamata.
+// ─────────────────────────────────────────────────────────────
+
+const CHECK_STATUS = new Set(['ok', 'todo', 'na']);
+const CHECKLIST_MAX = 12;
+
+function textList(value, limit, max = SHORT_MAX) {
+  const items = Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
+  return items.map((v) => text(v, max)).filter(Boolean).slice(0, limit);
+}
+
+function checkItem(value) {
+  if (typeof value === 'string') {
+    const item = text(value);
+    return item ? { item, status: 'todo', note: '' } : null;
+  }
+  if (!isPlainObject(value)) return null;
+  const item = text(value.item);
+  if (!item) return null;
+  return { item, status: oneOf(value.status, CHECK_STATUS) || 'todo', note: text(value.note) };
+}
+
+// `checklist` è null se l'LLM non l'ha restituita: il chiamante mantiene quella precedente
+export function normalizeCoach(raw) {
+  if (!isPlainObject(raw)) return null;
+  return {
+    ask: textList(raw.ask, 2),
+    propose: textList(raw.propose, 2, 500),
+    checklist: Array.isArray(raw.checklist)
+      ? raw.checklist.map(checkItem).filter(Boolean).slice(0, CHECKLIST_MAX)
+      : null
+  };
+}

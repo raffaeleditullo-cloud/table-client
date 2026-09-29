@@ -2,10 +2,38 @@
 // SERVIZIO AI COACH & REPORT AUTOMATICO (OPENROUTER FREE / LITE)
 // ─────────────────────────────────────────────────────────────
 
-const OPENROUTER_KEY =
-  import.meta.env.VITE_OPENROUTER_API_KEY ||
-  import.meta.env.OPENROUTER_API_KEY ||
-  '';
+// Le richieste passano dal proxy server-side (/api/chat): la chiave OpenRouter
+// non è mai inclusa nel bundle del browser
+const CHAT_ENDPOINT = '/api/chat';
+const MODEL = 'google/gemini-2.5-flash-lite';
+
+async function requestJson(systemPrompt, userContent) {
+  const res = await fetch(CHAT_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: MODEL,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent }
+      ]
+    })
+  });
+  if (!res.ok) throw new Error(`AI HTTP ${res.status}`);
+
+  const data = await res.json();
+  const raw = data?.choices?.[0]?.message?.content ?? '';
+  let clean = raw.trim();
+  if (clean.startsWith('```json')) clean = clean.slice(7);
+  if (clean.startsWith('```')) clean = clean.slice(3);
+  if (clean.endsWith('```')) clean = clean.slice(0, -3);
+  clean = clean.trim();
+  const firstBrace = clean.indexOf('{');
+  const lastBrace = clean.lastIndexOf('}');
+  const json = firstBrace !== -1 && lastBrace !== -1 ? clean.slice(firstBrace, lastBrace + 1) : clean;
+  return JSON.parse(json);
+}
 
 const MIMIT_KNOWLEDGE = `
 BANDO VOUCHER CLOUD E CYBERSECURITY MIMIT 2026:
@@ -32,38 +60,10 @@ export async function fetchLiveCoach(transcriptText, currentChecklist = []) {
   if (!transcriptText || transcriptText.trim().length < 25) return null;
 
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: `${COACH_PROMPT}\n\n${MIMIT_KNOWLEDGE}` },
-          {
-            role: 'user',
-            content: `CHECKLIST ATTUALE:\n${JSON.stringify(currentChecklist)}\n\nTRASCRIZIONE LIVE:\n${transcriptText.slice(-5000)}`
-          }
-        ]
-      })
-    });
-
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    const raw = data?.choices?.[0]?.message?.content ?? '';
-    let clean = raw.trim();
-    if (clean.startsWith('```json')) clean = clean.slice(7);
-    if (clean.startsWith('```')) clean = clean.slice(3);
-    if (clean.endsWith('```')) clean = clean.slice(0, -3);
-    clean = clean.trim();
-    const firstBrace = clean.indexOf('{');
-    const lastBrace = clean.lastIndexOf('}');
-    const json = firstBrace !== -1 && lastBrace !== -1 ? clean.slice(firstBrace, lastBrace + 1) : clean;
-    return JSON.parse(json);
+    return await requestJson(
+      `${COACH_PROMPT}\n\n${MIMIT_KNOWLEDGE}`,
+      `CHECKLIST ATTUALE:\n${JSON.stringify(currentChecklist)}\n\nTRASCRIZIONE LIVE:\n${transcriptText.slice(-5000)}`
+    );
   } catch (err) {
     console.warn('Live coach polling error:', err);
     return null;
@@ -106,43 +106,18 @@ Rispondi SOLO con un JSON valido con questa esatta struttura:
   "reportMarkdown": "Report completo e formale in Markdown (Sintesi, Profilo, Requisiti, Progetto Ammissibile MIMIT, Scheda Rocco Di Tolla con Inclusi/Esclusi, Prossimi Passi 20 Ottobre e 10 Novembre)"
 }`;
 
+  // Senza trascrizione l'AI inventerebbe tutto: si passa subito al fallback vuoto
+  if (!transcriptText || !transcriptText.trim()) {
+    return fallbackExtraction('', checklistNotes, 'Nessuna trascrizione disponibile: il riconoscimento vocale non ha rilevato parlato.');
+  }
+
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: `${PROMPT}\n\n${MIMIT_KNOWLEDGE}` },
-          {
-            role: 'user',
-            content: checklistNotes
-              ? `${transcriptText}\n\n[NOTE RACCOLTE DURANTE LA CHIAMATA]:\n${checklistNotes}`
-              : transcriptText
-          }
-        ]
-      })
-    });
-
-    if (!res.ok) {
-      return fallbackExtraction(transcriptText, checklistNotes);
-    }
-
-    const data = await res.json();
-    const raw = data?.choices?.[0]?.message?.content ?? '';
-    let clean = raw.trim();
-    if (clean.startsWith('```json')) clean = clean.slice(7);
-    if (clean.startsWith('```')) clean = clean.slice(3);
-    if (clean.endsWith('```')) clean = clean.slice(0, -3);
-    clean = clean.trim();
-    const firstBrace = clean.indexOf('{');
-    const lastBrace = clean.lastIndexOf('}');
-    const jsonStr = firstBrace !== -1 && lastBrace !== -1 ? clean.slice(firstBrace, lastBrace + 1) : clean;
-    const parsed = JSON.parse(jsonStr);
+    const parsed = await requestJson(
+      `${PROMPT}\n\n${MIMIT_KNOWLEDGE}`,
+      checklistNotes
+        ? `${transcriptText}\n\n[NOTE RACCOLTE DURANTE LA CHIAMATA]:\n${checklistNotes}`
+        : transcriptText
+    );
 
     if (!parsed.reportMarkdown) {
       parsed.reportMarkdown = generateFallbackMarkdown(parsed, transcriptText);
@@ -151,16 +126,18 @@ Rispondi SOLO con un JSON valido con questa esatta struttura:
     return parsed;
   } catch (err) {
     console.error('Post call analysis failed, using heuristic fallback:', err);
-    return fallbackExtraction(transcriptText, checklistNotes);
+    return fallbackExtraction(transcriptText, checklistNotes, 'Analisi AI non disponibile (servizio non raggiungibile o risposta non valida).');
   }
 }
 
-// Fallback extraction if API is offline or rate limited
-function fallbackExtraction(transcriptText, checklistNotes) {
+// Fallback se l'AI non risponde: NON inventa dati. Anagrafica, moduli, voce e
+// canali restano vuoti; settore e soluzioni sono solo suggerimenti da parole
+// chiave della trascrizione. `isFallback` permette alla UI di avvisare l'operatore.
+export function fallbackExtraction(transcriptText, checklistNotes = '', reason = 'Analisi AI non disponibile.') {
   const text = (transcriptText || '').toLowerCase();
-  
-  // Detect sector
-  let sectorId = 'b2b';
+
+  // Detect sector (nessun default: se non emerge resta vuoto)
+  let sectorId = null;
   if (/medico|dott|pazient|clinica|sanit|eeg|emg|visita|sanitario/.test(text)) sectorId = 'sanita';
   else if (/avvocat|studio legale|giurid|tribunal|commercialist/.test(text)) sectorId = 'legal';
   else if (/parrucchier|salone|capell|estetic|bellezza|trattament|barbier|spa/.test(text)) sectorId = 'benessere';
@@ -169,71 +146,63 @@ function fallbackExtraction(transcriptText, checklistNotes) {
   else if (/immobiliar|agenzia|case|appartament/.test(text)) sectorId = 'real_estate';
   else if (/auto|officin|meccanic|concessionar/.test(text)) sectorId = 'automotive';
 
-  // Detect solutions
+  // Detect solutions (nessun default: "chiamata" compare in ogni telefonata, quindi non conta)
   const solutionIds = [];
   if (/gestionale|fattur|contabil|magazzin|pratich/.test(text)) solutionIds.push('gestionale');
   if (/crm|clienti|rubrica|lead|whatsapp/.test(text)) solutionIds.push('crm');
   if (/sito|web|portale|online/.test(text)) solutionIds.push('web');
-  if (/voce|vocale|telefon|centralin|chiamat/.test(text)) solutionIds.push('voice');
+  if (/voce|vocale|telefon|centralin/.test(text)) solutionIds.push('voice');
   if (/document|archiv|ricerca|rag|faldon/.test(text)) solutionIds.push('rag');
   if (/cyber|sicurezza|firewall|antivirus|backup|protezion/.test(text)) solutionIds.push('cyber');
-  if (solutionIds.length === 0) solutionIds.push('gestionale', 'crm', 'voice');
 
-  const clientInfo = {
-    company: 'Azienda Cliente Rilevata',
-    vat: '',
-    name: 'Referente Principale',
-    role: 'Titolare',
-    email: '',
-    phone: ''
-  };
+  const hints = [
+    sectorId ? `settore suggerito: ${sectorId}` : null,
+    solutionIds.length ? `soluzioni suggerite: ${solutionIds.join(', ')}` : null
+  ].filter(Boolean);
 
-  const parsed = {
-    clientInfo,
+  return {
+    isFallback: true,
+    fallbackReason: reason,
+    clientInfo: { company: '', vat: '', name: '', role: '', email: '', phone: '' },
     sectorId,
     solutionIds,
-    modules: {
-      gestionale: ['fatturazione', 'magazzino'],
-      crm: ['contatti', 'automazioni'],
-      web: ['corporate', 'portale_clienti'],
-      voice: ['appointments', 'support'],
-      rag: ['archivio', 'dati_ue'],
-      cyber: ['firewall', 'backup']
-    },
-    voice: {
-      gender: 'female',
-      roles: ['appointments', 'support'],
-      prompt: 'Accoglienza telefonica e presa appuntamenti.'
-    },
-    channelIds: ['whatsapp', 'voip'],
-    currentState: 'Gestione manuale e processi non integrati.',
-    improvement: 'Adozione piattaforma Cloud SaaS unificata con AI e automazioni WhatsApp.',
-    operatorNotes: checklistNotes || 'Chiamata completata. Pratica idonea al Voucher MIMIT 2026.',
-    reportMarkdown: `## Sintesi Chiamata Bando MIMIT 2026\n\n- **Settore:** ${sectorId.toUpperCase()}\n- **Soluzioni Identificate:** ${solutionIds.join(', ')}\n- **Stato:** Candidatura idonea per la fase di Precompilazione del 20 Ottobre.\n\n### Trascrizione registrata:\n${transcriptText}`
-  };
+    modules: {},
+    voice: { gender: null, roles: [], prompt: '' },
+    channelIds: [],
+    currentState: '',
+    improvement: '',
+    operatorNotes: checklistNotes || '',
+    reportMarkdown: `## Sintesi Chiamata Bando MIMIT 2026 — DA COMPLETARE MANUALMENTE
 
-  return parsed;
+> ${reason}
+> I dati del cliente non sono stati estratti automaticamente: verificali e inseriscili nella scheda.
+
+- **Suggerimenti da parole chiave (da verificare):** ${hints.length ? hints.join(' · ') : 'nessuno'}
+${checklistNotes ? `\n### Note raccolte durante la chiamata\n${checklistNotes}\n` : ''}
+### Trascrizione registrata
+${transcriptText || '(nessuna trascrizione disponibile)'}`
+  };
 }
 
 function generateFallbackMarkdown(parsed, transcriptText) {
   return `## Dossier Sintesi Chiamata Bando MIMIT 2026
 
 ### Profilo Cliente
-- **Ragione Sociale:** ${parsed.clientInfo?.company || 'In definizione'}
-- **Referente:** ${parsed.clientInfo?.name || 'Referente'} (${parsed.clientInfo?.role || 'Titolare'})
-- **Settore:** ${parsed.sectorId || 'Non specificato'}
+- **Ragione Sociale:** ${parsed.clientInfo?.company || 'Non rilevata'}
+- **Referente:** ${parsed.clientInfo?.name || 'Non rilevato'}${parsed.clientInfo?.role ? ` (${parsed.clientInfo.role})` : ''}
+- **Settore:** ${parsed.sectorId || 'Non rilevato'}
 
 ### Soluzioni Ammissibili Identificate
 ${(parsed.solutionIds || []).map((s) => `- **${s.toUpperCase()}**: Moduli ammissibili configurati per il bando.`).join('\n')}
 
 ### Stato Iniziale & Obiettivi
-- **Stato Iniziale:** ${parsed.currentState || 'Processi frammentati'}
-- **Miglioramento Atteso:** ${parsed.improvement || 'Piattaforma Cloud SaaS integrata'}
+- **Stato Iniziale:** ${parsed.currentState || 'Non rilevato'}
+- **Miglioramento Atteso:** ${parsed.improvement || 'Non rilevato'}
 
 ### Scheda per Rocco Di Tolla (Manager)
 - **Moduli Inclusi:** ${JSON.stringify(parsed.modules)}
 - **Canali Attivi:** ${(parsed.channelIds || []).join(', ')}
-- **Note Tecniche:** ${parsed.operatorNotes || 'Nessuna anomalia riscontrata.'}
+- **Note Tecniche:** ${parsed.operatorNotes || 'Nessuna nota.'}
 
 ### Prossimi Passi
 1. Entro 15 Ottobre: Emissione preventivo formale con Codice Fornitore MIMIT Conflavoro.

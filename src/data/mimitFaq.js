@@ -93,6 +93,18 @@ export const MIMIT_FAQ = [
       'Per questo è fondamentale precompilare e firmare il progetto già nella finestra del 20 Ottobre.'
     ]
   },
+  {
+    id: 'chi_invia_domanda',
+    category: 'date',
+    icon: 'ShieldCheck',
+    badge: 'Invio Domanda',
+    question: 'Chi invia la domanda su Invitalia? Ci pensa Conflavoro?',
+    answer: 'No, l\'invio formale su Invitalia compete esclusivamente al cliente (o al suo commercialista) tramite SPID/CIE.',
+    details: [
+      'Conflavoro è il Fornitore Tecnologico Abilitato MIMIT: predispone l\'architettura tecnica, il progetto e il preventivo formale con Codice Fornitore MIMIT.',
+      'Il cliente o il suo consulente fiscale carica il preventivo il 20 Ottobre e trasmette il codice al Click-Day del 10 Novembre in piena autonomia.'
+    ]
+  },
 
   // ── 3. REQUISITI & DOCUMENTI ──
   {

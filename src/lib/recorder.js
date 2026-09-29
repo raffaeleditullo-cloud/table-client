@@ -11,21 +11,40 @@ export async function startRecording() {
     }
   });
 
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const source = ctx.createMediaStreamSource(stream);
-  const analyser = ctx.createAnalyser();
-  analyser.fftSize = 256;
-  source.connect(analyser);
-
-  const data = new Uint8Array(analyser.frequencyBinCount);
-  const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+  let ctx;
+  let analyser;
+  let mediaRecorder;
   const chunks = [];
 
-  mediaRecorder.ondataavailable = (e) => {
-    if (e.data && e.data.size > 0) chunks.push(e.data);
-  };
+  // Se qualcosa fallisce dopo getUserMedia il microfono va rilasciato, o resta acceso
+  try {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = ctx.createMediaStreamSource(stream);
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
 
-  mediaRecorder.start(1000);
+    // Safari non supporta audio/webm: in quel caso si usa il formato predefinito del browser
+    const webm = typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported('audio/webm');
+    mediaRecorder = new MediaRecorder(stream, webm ? { mimeType: 'audio/webm' } : undefined);
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    };
+    mediaRecorder.start(1000);
+  } catch (err) {
+    stream.getTracks().forEach((t) => t.stop());
+    ctx?.close().catch(() => {});
+    throw err;
+  }
+
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    stream.getTracks().forEach((t) => t.stop());
+    ctx.close().catch(() => {});
+  };
 
   return {
     level: () => {
@@ -36,17 +55,19 @@ export async function startRecording() {
     },
     stop: () =>
       new Promise((resolve) => {
-        mediaRecorder.onstop = () => {
-          stream.getTracks().forEach((t) => t.stop());
-          ctx.close();
-          const blob = new Blob(chunks, { type: 'audio/webm' });
-          resolve(blob);
+        const finish = () => {
+          release();
+          resolve(new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' }));
         };
-        mediaRecorder.stop();
+        // Registratore già fermo (es. microfono scollegato): onstop non arriverebbe mai
+        if (mediaRecorder.state === 'inactive') return finish();
+        mediaRecorder.onstop = finish;
+        try {
+          mediaRecorder.stop();
+        } catch {
+          finish();
+        }
       }),
-    cancel: () => {
-      stream.getTracks().forEach((t) => t.stop());
-      ctx.close();
-    }
+    cancel: release
   };
 }

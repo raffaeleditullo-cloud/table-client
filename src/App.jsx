@@ -243,11 +243,13 @@ function Configurator({ onReset, onForceReset }) {
   // Keyboard: ← back · → next · F cheat-sheet · C Copilota (ignored while typing)
   const navRef = useRef({});
   useEffect(() => {
-    navRef.current = { goBack, goNext, blocked: isSuccessModalOpen || faqOpen || copilotOpen };
+    navRef.current = { goBack, goNext, copilotOpen, blocked: isSuccessModalOpen || faqOpen || copilotOpen };
   });
   useEffect(() => {
     const onKey = (e) => {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || isTyping(e.target)) return;
+      // Copilota aperto: nessuna scorciatoia, così un tasto non chiude la chiamata lasciandola attiva
+      if (navRef.current.copilotOpen) return;
       if (e.key === 'f' || e.key === 'F') {
         e.preventDefault();
         setFaqOpen((v) => !v);

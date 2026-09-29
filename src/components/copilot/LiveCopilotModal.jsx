@@ -25,10 +25,10 @@ import {
 import { LIVE_RULES, TONE_STYLES } from '../../lib/liveRules';
 import { liveSpeechSupported, startLiveSpeech } from '../../lib/liveSpeech';
 import { startRecording } from '../../lib/recorder';
-import { fetchLiveCoach, fetchPostCallAnalysis } from '../../lib/aiCoach';
+import { fetchLiveCoach, fetchPostCallAnalysis, fallbackExtraction } from '../../lib/aiCoach';
 import { generateProjectPdf } from '../../utils/pdfGenerator';
 import { buildDossier, createDocCode } from '../../utils/dossier';
-import { normalizeExtraction } from '../../utils/normalizeExtraction';
+import { normalizeExtraction, normalizeCoach } from '../../utils/normalizeExtraction';
 import { SECTORS, getSolution } from '../../data/catalog';
 import { COLOR_PALETTES, FONT_OPTIONS, HOSTING_COMPLIANCE, AI_ORBS } from '../../data/configOptions';
 
@@ -43,6 +43,7 @@ export default function LiveCopilotModal({ isOpen, onClose, onApplyToConfigurato
   const [isThinking, setIsThinking] = useState(false);
   const [copiedTipId, setCopiedTipId] = useState(null);
   const [analysisData, setAnalysisData] = useState(null);
+  const [analysisWarning, setAnalysisWarning] = useState('');
   const [activeTab, setActiveTab] = useState('report'); // report | extracted | transcript
 
   const recRef = useRef(null);
@@ -51,15 +52,37 @@ export default function LiveCopilotModal({ isOpen, onClose, onApplyToConfigurato
   const coachRef = useRef(coach);
   coachRef.current = coach;
   const feedEndRef = useRef(null);
+  // Ogni avvio/chiusura incrementa la sessione: i risultati asincroni di una
+  // sessione precedente (microfono, coach, analisi) vengono scartati
+  const sessionRef = useRef(0);
 
   const supported = liveSpeechSupported();
 
-  // Reset when opened
+  const stopCapture = () => {
+    const rec = recRef.current;
+    recRef.current = null;
+    rec?.cancel();
+  };
+
+  // Apertura: avvia la chiamata. Chiusura (da qualunque percorso): microfono spento
   useEffect(() => {
-    if (isOpen && phase === 'idle') {
-      handleStartRecording();
+    if (isOpen) {
+      if (phase === 'idle') handleStartRecording();
+      return;
     }
+    sessionRef.current += 1;
+    stopCapture();
+    if (phase !== 'idle') setPhase('idle');
   }, [isOpen]);
+
+  // Smontaggio (es. nuova scheda o errore di rendering): nessun microfono resta acceso
+  useEffect(
+    () => () => {
+      sessionRef.current += 1;
+      stopCapture();
+    },
+    []
+  );
 
   // Timer & Audio Level
   useEffect(() => {
@@ -107,14 +130,15 @@ export default function LiveCopilotModal({ isOpen, onClose, onApplyToConfigurato
       isBusy = true;
       setIsThinking(true);
       lastLength = fullText.length;
+      const session = sessionRef.current;
 
       try {
-        const result = await fetchLiveCoach(fullText, coachRef.current.checklist);
-        if (result) {
+        const result = normalizeCoach(await fetchLiveCoach(fullText, coachRef.current.checklist));
+        if (result && session === sessionRef.current) {
           setCoach({
-            ask: Array.isArray(result.ask) ? result.ask.slice(0, 2) : [],
-            propose: Array.isArray(result.propose) ? result.propose.slice(0, 2) : [],
-            checklist: Array.isArray(result.checklist) ? result.checklist : coachRef.current.checklist
+            ask: result.ask,
+            propose: result.propose,
+            checklist: result.checklist ?? coachRef.current.checklist
           });
         }
       } catch (err) {
@@ -135,43 +159,73 @@ export default function LiveCopilotModal({ isOpen, onClose, onApplyToConfigurato
   }, [lines, interim]);
 
   const handleStartRecording = async () => {
+    const session = ++sessionRef.current;
+    firedRulesRef.current = new Set();
+    linesRef.current = [];
+    setLines([]);
+    setInterim('');
+    setTips([]);
+    setCoach({ ask: [], propose: [], checklist: [] });
+    setAnalysisData(null);
+    setAnalysisWarning('');
+
+    let rec;
     try {
-      firedRulesRef.current = new Set();
-      linesRef.current = [];
-      setLines([]);
-      setTips([]);
-      setCoach({ ask: [], propose: [], checklist: [] });
-      setAnalysisData(null);
-      recRef.current = await startRecording();
-      setSeconds(0);
-      setPhase('recording');
+      rec = await startRecording();
     } catch (err) {
-      alert("Consenti l'accesso al microfono nel browser per registrare la chiamata.");
+      if (session !== sessionRef.current) return;
+      console.error('Avvio registrazione fallito:', err);
+      alert(
+        err?.name === 'NotAllowedError' || err?.name === 'SecurityError'
+          ? "Consenti l'accesso al microfono nel browser per registrare la chiamata."
+          : "Impossibile avviare il microfono. Verifica che sia collegato e non in uso da un'altra applicazione."
+      );
       onClose();
+      return;
     }
+
+    // Copilota chiuso mentre il browser chiedeva il permesso: rilascia subito il microfono
+    if (session !== sessionRef.current) {
+      rec.cancel();
+      return;
+    }
+    recRef.current = rec;
+    setSeconds(0);
+    setPhase('recording');
   };
 
   const handleStopRecording = async () => {
     const activeRec = recRef.current;
     if (!activeRec) return;
+    const session = sessionRef.current;
+    recRef.current = null;
 
     setPhase('transcribing');
+    setInterim('');
+    const rawText = linesRef.current.join('\n').trim();
+    let data;
     try {
       await activeRec.stop();
-      const rawText = linesRef.current.join('\n').trim() || 'Chiamata completata.';
-      const checklistSummary = coach.checklist.length
-        ? coach.checklist.map((c) => `- [${c.status.toUpperCase()}] ${c.item}: ${c.note || ''}`).join('\n')
-        : '';
-
-      const data = await fetchPostCallAnalysis(rawText, checklistSummary);
-      setAnalysisData(normalizeExtraction(data));
-      setPhase('finished');
+      const checklistSummary = coachRef.current.checklist
+        .map((c) => `- [${String(c.status || 'todo').toUpperCase()}] ${c.item}: ${c.note || ''}`)
+        .join('\n');
+      data = await fetchPostCallAnalysis(rawText, checklistSummary);
     } catch (err) {
       console.error('Stop analysis error:', err);
-      setPhase('finished');
-    } finally {
-      recRef.current = null;
+      data = fallbackExtraction(rawText, '', "Errore imprevisto durante l'analisi della chiamata.");
     }
+
+    // Copilota chiuso o nuova chiamata avviata nel frattempo: risultato scartato
+    if (session !== sessionRef.current) return;
+
+    let extracted = normalizeExtraction(data);
+    if (!extracted) {
+      data = fallbackExtraction(rawText, '', 'Risposta AI non valida.');
+      extracted = normalizeExtraction(data);
+    }
+    setAnalysisWarning(data?.isFallback ? data.fallbackReason || 'Analisi AI non disponibile.' : '');
+    setAnalysisData(extracted);
+    setPhase('finished');
   };
 
   const handleCopyTip = (tip) => {
@@ -240,7 +294,13 @@ export default function LiveCopilotModal({ isOpen, onClose, onApplyToConfigurato
               </span>
             </div>
             <p className="text-[12px] text-white/70">
-              {phase === 'recording' ? `Registrazione in corso · ${formatTime(seconds)}` : phase === 'finished' ? 'Chiamata analizzata con successo' : 'In attesa...'}
+              {phase === 'recording'
+                ? `Registrazione in corso · ${formatTime(seconds)}`
+                : phase === 'finished'
+                  ? analysisWarning
+                    ? 'Analisi incompleta · verifica e completa i dati'
+                    : 'Chiamata analizzata con successo'
+                  : 'In attesa...'}
             </p>
           </div>
         </div>
@@ -317,9 +377,15 @@ export default function LiveCopilotModal({ isOpen, onClose, onApplyToConfigurato
             {/* ACTION BANNER */}
             <div className="p-6 bg-gradient-to-r from-[#1e293b] to-[#0f172a] border-2 border-brand rounded-sm shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <div>
-                <span className="text-[10.5px] font-black uppercase tracking-wider px-2 py-0.5 bg-emerald-500 text-black font-mono">
-                  ✓ Chiamata Analizzata
-                </span>
+                {analysisWarning ? (
+                  <span className="text-[10.5px] font-black uppercase tracking-wider px-2 py-0.5 bg-amber-400 text-black font-mono">
+                    ⚠ Dati da completare
+                  </span>
+                ) : (
+                  <span className="text-[10.5px] font-black uppercase tracking-wider px-2 py-0.5 bg-emerald-500 text-black font-mono">
+                    ✓ Chiamata Analizzata
+                  </span>
+                )}
                 <h2 className="text-2xl font-black text-white mt-1.5">
                   {analysisData.clientInfo?.company || 'Nuovo Cliente'}
                 </h2>
@@ -338,14 +404,16 @@ export default function LiveCopilotModal({ isOpen, onClose, onApplyToConfigurato
                   <span>⚡ Precompila Scheda & Vai al PDF</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
-                <button
-                  type="button"
-                  onClick={handleDirectDownloadPdf}
-                  className="inline-flex items-center gap-2 px-4 py-3 bg-brand hover:bg-brand-ink text-white text-xs font-black uppercase tracking-wider shadow-md transition-colors cursor-pointer"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>Scarica PDF Subito</span>
-                </button>
+                {!analysisWarning && (
+                  <button
+                    type="button"
+                    onClick={handleDirectDownloadPdf}
+                    className="inline-flex items-center gap-2 px-4 py-3 bg-brand hover:bg-brand-ink text-white text-xs font-black uppercase tracking-wider shadow-md transition-colors cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>Scarica PDF Subito</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -359,6 +427,19 @@ export default function LiveCopilotModal({ isOpen, onClose, onApplyToConfigurato
                 </button>
               </div>
             </div>
+
+            {analysisWarning && (
+              <div role="alert" className="p-4 bg-amber-400/10 border-2 border-amber-400 flex items-start gap-3">
+                <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-sm leading-relaxed">
+                  <p className="font-black text-amber-300">{analysisWarning}</p>
+                  <p className="text-white/80 mt-1">
+                    Nessun dato del cliente è stato inventato: anagrafica, moduli e canali restano vuoti. Usa{' '}
+                    <strong className="text-white">Precompila Scheda</strong> e completa i campi a mano prima di generare il PDF.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* TABS SELECTOR */}
             <div className="flex items-center gap-2 border-b border-white/10 pb-2">
