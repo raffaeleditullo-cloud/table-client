@@ -53,10 +53,10 @@ export const LIVE_RULES = [
     id: 'rimborso',
     tone: 'green',
     badge: '💶 MECCANISMO RIMBORSO',
-    title: 'Chiede se i soldi arrivano subito o se c\'è sconto',
-    hint: 'Non è sconto in fattura.',
-    say: 'Funziona a rimborso: sostiene la spesa con bonifico e il Ministero rimborsa il 50% a fondo perduto direttamente sul conto aziendale.',
-    match: /\b(sconto in fattura|sconto|arrivano subito|subito i soldi|anticip\w*|quando (arrivano|pagano|rimborsano)|soldi)\b/i
+    title: 'Chiede come e quando arrivano i soldi o se deve anticipare',
+    hint: 'Funziona a rimborso su fattura quietanzata.',
+    say: 'Funziona a rimborso: dopo l\'invio del 10 Novembre, Invitalia emette la concessione con codice CUP entro 30-60 gg. Noi realizziamo il progetto in 20-30 gg, Lei salda la fattura con bonifico indicando il CUP e il Ministero le accredita il 50% a fondo perduto sul conto aziendale entro 60 gg dalla rendicontazione.',
+    match: /\b(sconto in fattura|sconto|arrivano subito|subito i soldi|anticip\w*|quando (arrivano|pagano|rimborsano)|soldi|tempi|tempistic\w*|dopo il 10 novembre|bonifico)\b/i
   },
   {
     id: 'requisiti',

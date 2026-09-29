@@ -47,11 +47,27 @@ export const MIMIT_FAQ = [
     category: 'bando',
     icon: 'ArrowRightLeft',
     badge: 'Meccanismo a Rimborso',
-    question: 'I soldi arrivano in anticipo o come funziona il pagamento?',
-    answer: 'Il bando funziona con la formula a RIMBORSO: il beneficiario sostiene la spesa con bonifico parlante e poi riceve il 50% dal Ministero.',
+    question: 'I soldi arrivano in anticipo o come funziona il rimborso del 50%?',
+    answer: 'Il bando funziona a RIMBORSO su spesa sostenuta e quietanzata: non è uno sconto diretto in fattura.',
     details: [
-      'Può essere richiesto in 2 tranche (50% a metà progetto + saldo a fine piano) o in un\'unica soluzione finale.',
-      'IMPORTANTE: Nessun pagamento o contratto deve essere avviato prima della presentazione formale della domanda (10 Novembre).'
+      'Il cliente salda la fattura elettronica emessa da Conflavoro con bonifico parlante (indicando il codice CUP del progetto).',
+      'Si carica la fattura quietanzata e la relazione tecnica di collaudo su Invitalia.',
+      'Il Ministero accredita il 50% a fondo perduto direttamente sull\'IBAN aziendale entro 60 giorni dalla rendicontazione.',
+      'IMPORTANTE: Nessun pagamento deve essere effettuato prima dell\'apertura del bando (10 Novembre) e del decreto di concessione con CUP.'
+    ]
+  },
+  {
+    id: 'tempistiche_dopo_10_novembre',
+    category: 'date',
+    icon: 'Hourglass',
+    badge: 'Cronologia Erogazione',
+    question: 'Cosa succede dopo il 10 Novembre? Quali sono i tempi per ricevere il bonifico?',
+    answer: 'La procedura post Click-Day si articola in 4 passaggi cronologici:',
+    details: [
+      '1. Entro 30-60 gg dal Click-Day: Invitalia invia PEC di concessione del voucher e assegna il Codice CUP.',
+      '2. In 20-30 gg successivi: Conflavoro sviluppa, attiva e collauda le piattaforme Cloud/AI ed emette fattura con CUP.',
+      '3. Pagamento e Rendicontazione: Il cliente paga la fattura con bonifico tracciabile e carica la documentazione su Invitalia.',
+      '4. Entro 60 gg dalla rendicontazione: Il Ministero effettua il bonifico del 50% a fondo perduto direttamente sul conto dell\'azienda.'
     ]
   },
   {
